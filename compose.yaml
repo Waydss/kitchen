@@ -1,0 +1,91 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-kitchen}
+      POSTGRES_USER: ${POSTGRES_USER:-kitchen}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kitchen}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    image: migrate/migrate:v4.18.2
+    volumes:
+      - ./migrations:/migrations:ro
+    command:
+      - -path=/migrations
+      - -database=postgres://${POSTGRES_USER:-kitchen}:${POSTGRES_PASSWORD:-kitchen}@postgres:5432/${POSTGRES_DB:-kitchen}?sslmode=disable
+      - up
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  restaurant:
+    build:
+      context: .
+      args:
+        SERVICE: restaurant
+    environment:
+      HTTP_ADDRESS: :8081
+      SHUTDOWN_TIMEOUT: ${SHUTDOWN_TIMEOUT:-10s}
+    expose:
+      - "8081"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8081/health/live"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      args:
+        SERVICE: api
+    environment:
+      HTTP_ADDRESS: :8080
+      DATABASE_URL: postgres://${POSTGRES_USER:-kitchen}:${POSTGRES_PASSWORD:-kitchen}@postgres:5432/${POSTGRES_DB:-kitchen}?sslmode=disable
+      SHUTDOWN_TIMEOUT: ${SHUTDOWN_TIMEOUT:-10s}
+      RESTAURANT_REQUEST_TIMEOUT: ${RESTAURANT_REQUEST_TIMEOUT:-3s}
+      SWAGGER_ORIGIN: http://localhost:${SWAGGER_PORT:-8082}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      restaurant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/health/ready"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+
+  swagger-ui:
+    image: swaggerapi/swagger-ui:v5.18.2
+    environment:
+      SWAGGER_JSON: /spec/openapi.yaml
+      DISPLAY_REQUEST_DURATION: "true"
+      TRY_IT_OUT_ENABLED: "true"
+      VALIDATOR_URL: none
+    volumes:
+      - ./api/openapi.yaml:/spec/openapi.yaml:ro
+    ports:
+      - "${SWAGGER_PORT:-8082}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+
+volumes:
+  postgres_data:

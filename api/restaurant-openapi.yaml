@@ -1,0 +1,60 @@
+openapi: 3.0.3
+info:
+  title: Example Restaurant API
+  version: 0.1.0
+  description: Внутренний service-to-service контракт. Не предназначен для web-клиента и не публикуется на host.
+  contact:
+    name: "TODO: укажите имя владельца API"
+    email: your-email@example.com
+servers:
+  - url: http://restaurant:8081
+paths:
+  /health/live:
+    get:
+      operationId: getRestaurantLiveness
+      responses:
+        "200":
+          description: Сервис работает
+  /api/v1/info:
+    get:
+      operationId: getRestaurantInfo
+      responses:
+        "200":
+          description: Идентификатор и название заведения
+  /api/v1/orders:
+    post:
+      operationId: createRestaurantOrder
+      description: Повторный order_id возвращает ранее созданный заказ без повторного списания остатка.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [order_id, items]
+              properties:
+                order_id:
+                  type: string
+                  format: uuid
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [external_item_id, quantity]
+                    properties:
+                      external_item_id:
+                        type: string
+                      quantity:
+                        type: integer
+                        minimum: 1
+                        maximum: 20
+      responses:
+        "201":
+          description: Заказ принят
+        "200":
+          description: Идемпотентный повтор
+        "400":
+          description: Некорректный запрос
+        "409":
+          description: Позиция отсутствует

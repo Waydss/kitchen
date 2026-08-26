@@ -1,0 +1,62 @@
+@startuml
+title Авито.Кухня — схема данных
+hide methods
+
+entity restaurants {
+  * id : uuid <<PK>>
+  --
+  external_restaurant_id : text <<UQ>>
+  status : text
+  integration_url : text
+}
+entity menu_categories {
+  * id : uuid <<PK>>
+  --
+  restaurant_id : uuid <<FK>>
+  position : integer
+}
+entity menu_items {
+  * id : uuid <<PK>>
+  --
+  restaurant_id : uuid <<FK>>
+  category_id : uuid <<FK>>
+  external_item_id : text
+  price : bigint
+  is_available : boolean
+}
+entity orders {
+  * id : uuid <<PK>>
+  --
+  customer_id : uuid
+  restaurant_id : uuid <<FK>>
+  status : text
+  total_price : bigint
+  idempotency_key : text
+  external_order_id : text
+}
+entity order_items {
+  * id : uuid <<PK>>
+  --
+  order_id : uuid <<FK>>
+  restaurant_id : uuid <<FK>>
+  menu_item_id : uuid <<FK>>
+  unit_price : bigint
+  quantity : integer
+}
+entity order_status_history {
+  * id : uuid <<PK>>
+  --
+  order_id : uuid <<FK>>
+  previous_status : text
+  status : text
+  source : text
+}
+
+restaurants ||--o{ menu_categories
+restaurants ||--o{ menu_items
+menu_categories ||--o{ menu_items
+restaurants ||--o{ orders
+orders ||--|{ order_items
+menu_items ||--o{ order_items
+orders ||--|{ order_status_history
+@enduml

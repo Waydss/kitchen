@@ -1,0 +1,371 @@
+openapi: 3.0.3
+info:
+  title: Авито.Кухня API
+  version: 0.1.0
+  description: Публичный API web-клиента. Kitchen API является единственной точкой входа и источником истины по заказам.
+  contact:
+    name: "TODO: укажите имя владельца API"
+    email: your-email@example.com
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: Health
+  - name: Restaurants
+  - name: Orders
+paths:
+  /health/live:
+    get:
+      tags: [Health]
+      summary: Проверить работу процесса
+      operationId: getLiveness
+      responses:
+        "200":
+          description: Процесс работает
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /health/ready:
+    get:
+      tags: [Health]
+      summary: Проверить готовность API и PostgreSQL
+      operationId: getReadiness
+      responses:
+        "200":
+          description: Сервис готов
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "503":
+          description: PostgreSQL недоступен
+  /api/v1/restaurants:
+    get:
+      tags: [Restaurants]
+      summary: Получить видимые заведения
+      operationId: listRestaurants
+      responses:
+        "200":
+          description: Список заведений
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [restaurants]
+                properties:
+                  restaurants:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Restaurant"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/restaurants/{restaurantId}:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    get:
+      tags: [Restaurants]
+      summary: Получить карточку заведения
+      operationId: getRestaurant
+      responses:
+        "200":
+          description: Заведение
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Restaurant"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/restaurants/{restaurantId}/menu:
+    parameters:
+      - $ref: "#/components/parameters/RestaurantId"
+    get:
+      tags: [Restaurants]
+      summary: Получить меню заведения
+      operationId: getRestaurantMenu
+      responses:
+        "200":
+          description: Меню с доступностью и ценами в копейках
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Menu"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/orders:
+    post:
+      tags: [Orders]
+      summary: Создать заказ идемпотентно
+      operationId: createOrder
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
+      responses:
+        "200":
+          description: Идемпотентный повтор возвращает существующий заказ
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "201":
+          description: Заказ создан, решение заведения сохранено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "202":
+          description: Заказ сохранён и ожидает подтверждения временно недоступного заведения
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/orders/{orderId}:
+    parameters:
+      - $ref: "#/components/parameters/OrderId"
+    get:
+      tags: [Orders]
+      summary: Получить заказ и историю статусов
+      operationId: getOrder
+      responses:
+        "200":
+          description: Заказ
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+components:
+  parameters:
+    RestaurantId:
+      name: restaurantId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    BadRequest:
+      description: Некорректный запрос
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Конфликт с текущим состоянием
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalError:
+      description: Внутренняя ошибка
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+        service:
+          type: string
+    Restaurant:
+      type: object
+      required: [id, name, description, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [open, temporarily_unavailable]
+        created_at:
+          type: string
+          format: date-time
+    Menu:
+      type: object
+      required: [restaurant_id, categories]
+      properties:
+        restaurant_id:
+          type: string
+          format: uuid
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/MenuCategory"
+    MenuCategory:
+      type: object
+      required: [id, name, position, items]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        position:
+          type: integer
+          minimum: 0
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MenuItem"
+    MenuItem:
+      type: object
+      required: [id, name, description, price, available]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Цена в копейках
+        available:
+          type: boolean
+    CreateOrderRequest:
+      type: object
+      required: [customer_id, restaurant_id, items]
+      properties:
+        customer_id:
+          type: string
+          format: uuid
+        restaurant_id:
+          type: string
+          format: uuid
+        items:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: object
+            required: [menu_item_id, quantity]
+            properties:
+              menu_item_id:
+                type: string
+                format: uuid
+              quantity:
+                type: integer
+                minimum: 1
+                maximum: 20
+    OrderStatus:
+      type: string
+      enum: [restaurant_confirmation_pending, confirmed, rejected, preparing, ready, delivering, delivered, cancelled]
+    Order:
+      type: object
+      required: [id, customer_id, restaurant_id, status, total_price, items, status_history, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        customer_id:
+          type: string
+          format: uuid
+        restaurant_id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/OrderStatus"
+        total_price:
+          type: integer
+          format: int64
+          description: Итоговая цена в копейках
+        items:
+          type: array
+          items:
+            type: object
+            required: [menu_item_id, name, unit_price, quantity]
+            properties:
+              menu_item_id:
+                type: string
+                format: uuid
+              name:
+                type: string
+              unit_price:
+                type: integer
+                format: int64
+              quantity:
+                type: integer
+        status_history:
+          type: array
+          items:
+            type: object
+            required: [status, source, created_at]
+            properties:
+              status:
+                $ref: "#/components/schemas/OrderStatus"
+              source:
+                type: string
+                enum: [customer, restaurant, system]
+              created_at:
+                type: string
+                format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true

@@ -1,0 +1,20 @@
+@startuml
+title CJM заведения
+start
+:Example restaurant получает заказ по HTTP;
+if (order_id уже обработан?) then (да)
+  :Возвращает сохранённый результат;
+else (нет)
+  :Проверяет внешние SKU и остатки;
+  if (Все позиции доступны?) then (да)
+    :Резервирует позиции;
+    :Подтверждает заказ;
+    :Сообщает confirmed в Авито.Кухню;
+    :Меняет статус на preparing;
+    :Сообщает ready;
+  else (нет)
+    :Отклоняет заказ с причиной item_unavailable;
+  endif
+endif
+stop
+@enduml
