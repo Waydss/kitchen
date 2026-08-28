@@ -9,6 +9,14 @@ entity restaurants {
   status : text
   integration_url : text
 }
+entity restaurant_images {
+  * id : uuid <<PK>>
+  --
+  restaurant_id : uuid <<FK>>
+  url : text
+  position : integer
+  is_cover : boolean
+}
 entity menu_categories {
   * id : uuid <<PK>>
   --
@@ -23,6 +31,7 @@ entity menu_items {
   external_item_id : text
   price : bigint
   is_available : boolean
+  image_url : text <<nullable>>
 }
 entity orders {
   * id : uuid <<PK>>
@@ -54,6 +63,7 @@ entity order_status_history {
 }
 
 restaurants ||--o{ menu_categories
+restaurants ||--o{ restaurant_images
 restaurants ||--o{ menu_items
 menu_categories ||--o{ menu_items
 restaurants ||--o{ orders

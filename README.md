@@ -24,17 +24,18 @@ http://localhost:8082
 
 Также можно выполнить `make swagger`: команда поднимет стек и напечатает адрес интерфейса. Swagger UI загружает публичный контракт `api/openapi.yaml`. Кнопка `Try it out` отправляет запросы в Kitchen API на `http://localhost:8080`; для неё настроен ограниченный CORS только с origin Swagger UI.
 
-Название, версия, описание и владелец API задаются в секции `info` файла `api/openapi.yaml`; сейчас владельцем указан GitHub-логин `waydsk`. Если хотите опубликовать почту, добавьте поле `contact.email` в этот файл и в `api/restaurant-openapi.yaml`.
+Название, версия, описание и контакт владельца API задаются в секции `info` файла `api/openapi.yaml`. Внутренний контракт и его контакт находятся в `api/restaurant-openapi.yaml`.
 
 PostgreSQL публикуется только на loopback-интерфейсе и по умолчанию использует host-порт `55432`, чтобы не конфликтовать с локальным PostgreSQL на `5432`. Внутри Compose сервисы по-прежнему используют `postgres:5432`; порт можно изменить через `.env`.
 
 ## Публичный API Kitchen
 
 - `GET /health/live` и `GET /health/ready` — liveness/readiness.
-- `GET /api/v1/restaurants` — список заведений.
-- `GET /api/v1/restaurants/{restaurantId}` — карточка заведения.
-- `GET /api/v1/restaurants/{restaurantId}/menu` — меню и доступность.
+- `GET /api/v1/restaurants` — список заведений с обложкой.
+- `GET /api/v1/restaurants/{restaurantId}` — карточка с упорядоченной галереей.
+- `GET /api/v1/restaurants/{restaurantId}/menu` — меню, доступность и изображения блюд.
 - `POST /api/v1/orders` — идемпотентное создание заказа.
+- `GET /api/v1/orders?customer_id={uuid}` — все заказы пользователя, начиная с нового.
 - `GET /api/v1/orders/{orderId}` — заказ и история статусов из PostgreSQL Kitchen.
 
 Полный публичный контракт находится в `api/openapi.yaml`. Внутренний контракт example restaurant описан отдельно в `api/restaurant-openapi.yaml` и не предназначен для web-клиента.
@@ -63,11 +64,23 @@ Kitchen проверяет заведение и позиции, рассчит�
 
 Demo restaurant ID: `10000000-0000-0000-0000-000000000001`. Цена хранится в копейках: `59000` означает 590 ₽.
 
+Историю заказов пользователя можно получить так:
+
+```bash
+curl 'http://localhost:8080/api/v1/orders?customer_id=50000000-0000-0000-0000-000000000001'
+```
+
+Ответ содержит `orders`, отсортированные от нового к старому. Для пользователя без заказов возвращается `{"orders":[]}`.
+
+## Изображения каталога
+
+PostgreSQL хранит только URL изображений. Для списка заведений поле `cover_image_url` берётся из единственной записи `restaurant_images` с `is_cover = true`; если фотографий нет, API возвращает `null`. Карточка возвращает все фотографии в `images`, отсортированные по `position`, либо пустой массив. У позиции меню `image_url` также может быть `null`. Загрузка файлов и внешнее object storage сознательно не входят в MVP.
+
 ## Архитектура и данные
 
 Поток запроса: `Web Client → Kitchen HTTP handler → order service → repository/PostgreSQL → internal restaurant HTTP client → Example Restaurant`. Example restaurant не читает PostgreSQL Kitchen и не является источником пользовательского состояния.
 
-Таблицы: `restaurants`, `menu_categories`, `menu_items`, `orders`, `order_items`, `order_status_history`. `order_items` содержит снимки названия, внешнего SKU и цены на момент заказа. Составные FK не позволяют связать заказ или товар с чужим заведением. Migrations применяются до старта API.
+Таблицы: `restaurants`, `restaurant_images`, `menu_categories`, `menu_items`, `orders`, `order_items`, `order_status_history`. `order_items` содержит снимки названия, внешнего SKU и цены на момент заказа; текущие изображения каталога в снимок заказа не входят. Составные FK не позволяют связать заказ или товар с чужим заведением. Migrations применяются до старта API.
 
 ## Команды разработки
 

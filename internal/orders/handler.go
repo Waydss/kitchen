@@ -10,6 +10,7 @@ import (
 
 type OrderService interface {
 	Create(ctx context.Context, command CreateCommand) (CreateResult, error)
+	ListByCustomerID(ctx context.Context, customerID string) ([]Order, error)
 	Get(ctx context.Context, id string) (Order, error)
 }
 
@@ -33,12 +34,17 @@ type errorResponse struct {
 	Message string `json:"message"`
 }
 
+type ordersResponse struct {
+	Orders []Order `json:"orders"`
+}
+
 func NewHandler(service OrderService) *Handler {
 	return &Handler{service: service}
 }
 
 func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 	group.POST("/orders", h.createOrder)
+	group.GET("/orders", h.listOrders)
 	group.GET("/orders/:orderId", h.getOrder)
 }
 
@@ -84,11 +90,20 @@ func (h *Handler) getOrder(c *gin.Context) {
 	c.JSON(http.StatusOK, order)
 }
 
+func (h *Handler) listOrders(c *gin.Context) {
+	orders, err := h.service.ListByCustomerID(c.Request.Context(), c.Query("customer_id"))
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, ordersResponse{Orders: orders})
+}
+
 func writeError(c *gin.Context, err error) {
 	_ = c.Error(err)
 	switch {
 	case errors.Is(err, ErrInvalidRequest):
-		c.JSON(http.StatusBadRequest, errorResponse{Code: "invalid_request", Message: "invalid order request"})
+		c.JSON(http.StatusBadRequest, errorResponse{Code: "invalid_request", Message: "invalid request"})
 	case errors.Is(err, ErrRestaurantNotFound):
 		c.JSON(http.StatusNotFound, errorResponse{Code: "restaurant_not_found", Message: "restaurant was not found"})
 	case errors.Is(err, ErrMenuItemNotFound):

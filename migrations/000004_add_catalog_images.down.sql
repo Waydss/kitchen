@@ -1,0 +1,7 @@
+DELETE FROM restaurants
+WHERE id = '10000000-0000-0000-0000-000000000002';
+
+DROP TABLE IF EXISTS restaurant_images;
+
+ALTER TABLE menu_items
+    DROP COLUMN IF EXISTS image_url;

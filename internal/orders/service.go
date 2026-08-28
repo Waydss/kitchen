@@ -54,6 +54,20 @@ func (s *Service) Get(ctx context.Context, id string) (Order, error) {
 	return order, nil
 }
 
+func (s *Service) ListByCustomerID(ctx context.Context, customerID string) ([]Order, error) {
+	if _, err := uuid.Parse(customerID); err != nil {
+		return nil, ErrInvalidRequest
+	}
+	orders, err := s.repository.ListByCustomerID(ctx, customerID)
+	if err != nil {
+		return nil, fmt.Errorf("list customer orders: %w", err)
+	}
+	if orders == nil {
+		orders = make([]Order, 0)
+	}
+	return orders, nil
+}
+
 func (s *Service) submitPending(ctx context.Context, order Order, created bool) (CreateResult, error) {
 	if order.Status != StatusPending {
 		return CreateResult{Order: order, Created: created}, nil

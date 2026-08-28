@@ -9,7 +9,7 @@ import (
 )
 
 type CatalogService interface {
-	ListRestaurants(ctx context.Context) ([]Restaurant, error)
+	ListRestaurants(ctx context.Context) ([]RestaurantSummary, error)
 	GetRestaurant(ctx context.Context, id string) (Restaurant, error)
 	GetMenu(ctx context.Context, restaurantID string) (Menu, error)
 }

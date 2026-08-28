@@ -9,13 +9,13 @@ import (
 const testRestaurantID = "10000000-0000-0000-0000-000000000001"
 
 type repositoryStub struct {
-	restaurants []Restaurant
+	restaurants []RestaurantSummary
 	restaurant  Restaurant
 	categories  []MenuCategory
 	err         error
 }
 
-func (r repositoryStub) ListRestaurants(context.Context) ([]Restaurant, error) {
+func (r repositoryStub) ListRestaurants(context.Context) ([]RestaurantSummary, error) {
 	return r.restaurants, r.err
 }
 
@@ -59,5 +59,17 @@ func TestGetRestaurantPreservesNotFoundError(t *testing.T) {
 
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestGetRestaurantNormalizesMissingImagesToArray(t *testing.T) {
+	service := NewService(repositoryStub{restaurant: Restaurant{ID: testRestaurantID}})
+
+	restaurant, err := service.GetRestaurant(context.Background(), testRestaurantID)
+	if err != nil {
+		t.Fatalf("get restaurant: %v", err)
+	}
+	if restaurant.Images == nil || len(restaurant.Images) != 0 {
+		t.Fatalf("expected empty images array, got %#v", restaurant.Images)
 	}
 }

@@ -15,11 +15,14 @@ const (
 
 type repositoryStub struct {
 	existing     Order
+	orders       []Order
 	createResult Order
 	updated      Order
 	findErr      error
+	listErr      error
 	createCalls  int
 	updateCalls  int
+	listCalls    int
 }
 
 func (r *repositoryStub) FindByIdempotencyKey(context.Context, string, string) (Order, error) {
@@ -33,6 +36,11 @@ func (r *repositoryStub) CreatePending(context.Context, CreateCommand) (Order, b
 
 func (r *repositoryStub) Get(context.Context, string) (Order, error) {
 	return r.existing, r.findErr
+}
+
+func (r *repositoryStub) ListByCustomerID(context.Context, string) ([]Order, error) {
+	r.listCalls++
+	return r.orders, r.listErr
 }
 
 func (r *repositoryStub) ApplyRestaurantDecision(context.Context, string, RestaurantDecision) (Order, error) {
@@ -125,6 +133,32 @@ func TestPartnerFailureKeepsOrderPending(t *testing.T) {
 	}
 	if !result.Pending || result.Order.Status != StatusPending || repository.updateCalls != 0 {
 		t.Fatalf("unexpected pending result: %#v", result)
+	}
+}
+
+func TestServiceListOrdersReturnsCustomerOrders(t *testing.T) {
+	repository := &repositoryStub{orders: []Order{testOrder(StatusConfirmed)}}
+	service := NewService(repository, &restaurantClientStub{})
+
+	orders, err := service.ListByCustomerID(context.Background(), testCustomerID)
+	if err != nil {
+		t.Fatalf("list customer orders: %v", err)
+	}
+	if repository.listCalls != 1 || len(orders) != 1 || orders[0].ID != testOrderID {
+		t.Fatalf("unexpected orders: %#v, calls=%d", orders, repository.listCalls)
+	}
+}
+
+func TestServiceListOrdersRejectsInvalidCustomerID(t *testing.T) {
+	repository := &repositoryStub{}
+	service := NewService(repository, &restaurantClientStub{})
+
+	_, err := service.ListByCustomerID(context.Background(), "invalid")
+	if !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("expected ErrInvalidRequest, got %v", err)
+	}
+	if repository.listCalls != 0 {
+		t.Fatalf("repository must not be called, got %d calls", repository.listCalls)
 	}
 }
 

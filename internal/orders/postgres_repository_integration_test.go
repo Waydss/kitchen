@@ -78,4 +78,19 @@ func TestPostgresRepositoryCreatesIdempotentOrderAndPersistsRejection(t *testing
 	if stored.Status != StatusRejected || stored.RejectionReason != "item_unavailable" {
 		t.Fatalf("PostgreSQL is not source of truth: %#v", stored)
 	}
+
+	orders, err := repository.ListByCustomerID(ctx, command.CustomerID)
+	if err != nil {
+		t.Fatalf("list customer orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].ID != created.ID || len(orders[0].Items) != 1 || len(orders[0].StatusHistory) != 2 {
+		t.Fatalf("unexpected customer orders: %#v", orders)
+	}
+	empty, err := repository.ListByCustomerID(ctx, uuid.NewString())
+	if err != nil {
+		t.Fatalf("list unknown customer orders: %v", err)
+	}
+	if empty == nil || len(empty) != 0 {
+		t.Fatalf("expected empty orders array, got %#v", empty)
+	}
 }

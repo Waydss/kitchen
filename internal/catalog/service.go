@@ -15,13 +15,13 @@ func NewService(repository Repository) *Service {
 	return &Service{repository: repository}
 }
 
-func (s *Service) ListRestaurants(ctx context.Context) ([]Restaurant, error) {
+func (s *Service) ListRestaurants(ctx context.Context) ([]RestaurantSummary, error) {
 	restaurants, err := s.repository.ListRestaurants(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list restaurants: %w", err)
 	}
 	if restaurants == nil {
-		restaurants = make([]Restaurant, 0)
+		restaurants = make([]RestaurantSummary, 0)
 	}
 	return restaurants, nil
 }
@@ -33,6 +33,9 @@ func (s *Service) GetRestaurant(ctx context.Context, id string) (Restaurant, err
 	restaurant, err := s.repository.GetRestaurant(ctx, id)
 	if err != nil {
 		return Restaurant{}, fmt.Errorf("get restaurant: %w", err)
+	}
+	if restaurant.Images == nil {
+		restaurant.Images = make([]RestaurantImage, 0)
 	}
 	return restaurant, nil
 }

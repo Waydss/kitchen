@@ -13,10 +13,12 @@ import (
 )
 
 type orderServiceStub struct {
-	result  CreateResult
-	order   Order
-	err     error
-	command CreateCommand
+	result     CreateResult
+	order      Order
+	orders     []Order
+	err        error
+	command    CreateCommand
+	customerID string
 }
 
 func (s *orderServiceStub) Create(_ context.Context, command CreateCommand) (CreateResult, error) {
@@ -26,6 +28,11 @@ func (s *orderServiceStub) Create(_ context.Context, command CreateCommand) (Cre
 
 func (s *orderServiceStub) Get(context.Context, string) (Order, error) {
 	return s.order, s.err
+}
+
+func (s *orderServiceStub) ListByCustomerID(_ context.Context, customerID string) ([]Order, error) {
+	s.customerID = customerID
+	return s.orders, s.err
 }
 
 func TestCreateOrderMapsRequestAndReturnsCreated(t *testing.T) {
@@ -99,6 +106,42 @@ func TestWriteErrorDoesNotExposeInternalDetails(t *testing.T) {
 	router.ServeHTTP(response, request)
 
 	if response.Code != http.StatusInternalServerError || bytes.Contains(response.Body.Bytes(), []byte("password")) {
+		t.Fatalf("unexpected response: %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestHandlerListOrdersReturnsCustomerOrders(t *testing.T) {
+	service := &orderServiceStub{orders: []Order{testOrder(StatusConfirmed)}}
+	router := testOrderRouter(service)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/orders?customer_id="+testCustomerID, nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+	if service.customerID != testCustomerID {
+		t.Fatalf("unexpected customer id: %s", service.customerID)
+	}
+	var body ordersResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(body.Orders) != 1 || body.Orders[0].ID != testOrderID {
+		t.Fatalf("unexpected orders: %#v", body.Orders)
+	}
+}
+
+func TestHandlerListOrdersReturnsEmptyArray(t *testing.T) {
+	service := &orderServiceStub{orders: []Order{}}
+	router := testOrderRouter(service)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/orders?customer_id="+testCustomerID, nil)
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte(`"orders":[]`)) {
 		t.Fatalf("unexpected response: %d %s", response.Code, response.Body.String())
 	}
 }

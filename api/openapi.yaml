@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Авито.Кухня API
-  version: 0.1.0
+  version: 0.2.0
   description: Публичный API web-клиента. Kitchen API является единственной точкой входа и источником истины по заказам.
   contact:
     name: Григорьев Вадим
@@ -56,7 +56,7 @@ paths:
                   restaurants:
                     type: array
                     items:
-                      $ref: "#/components/schemas/Restaurant"
+                      $ref: "#/components/schemas/RestaurantSummary"
         "500":
           $ref: "#/components/responses/InternalError"
   /api/v1/restaurants/{restaurantId}:
@@ -100,6 +100,37 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
   /api/v1/orders:
+    get:
+      tags: [Orders]
+      summary: Получить все заказы пользователя
+      description: Возвращает заказы пользователя из PostgreSQL Kitchen, начиная с самого нового.
+      operationId: listCustomerOrders
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          description: Идентификатор пользователя, переданный при создании заказа
+          schema:
+            type: string
+            format: uuid
+          example: 50000000-0000-0000-0000-000000000001
+      responses:
+        "200":
+          description: Заказы пользователя; пустой массив, если заказов нет
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [orders]
+                properties:
+                  orders:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Order"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
     post:
       tags: [Orders]
       summary: Создать заказ идемпотентно
@@ -108,10 +139,12 @@ paths:
         - name: Idempotency-Key
           in: header
           required: true
+          description: Уникальный ключ создания заказа. Для повтора того же запроса используйте прежний ключ; для нового заказа — новый.
           schema:
             type: string
             minLength: 8
             maxLength: 128
+          example: order-20260828-0001
       requestBody:
         required: true
         content:
@@ -221,9 +254,9 @@ components:
           type: string
         service:
           type: string
-    Restaurant:
+    RestaurantSummary:
       type: object
-      required: [id, name, description, status, created_at]
+      required: [id, name, description, status, cover_image_url, created_at]
       properties:
         id:
           type: string
@@ -235,9 +268,46 @@ components:
         status:
           type: string
           enum: [open, temporarily_unavailable]
+        cover_image_url:
+          type: string
+          format: uri
+          nullable: true
+          description: Обложка заведения или null, если фотографий нет
         created_at:
           type: string
           format: date-time
+    Restaurant:
+      type: object
+      required: [id, name, description, status, images, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [open, temporarily_unavailable]
+        images:
+          type: array
+          description: Фотографии в порядке отображения; пустой массив, если фотографий нет
+          items:
+            $ref: "#/components/schemas/RestaurantImage"
+        created_at:
+          type: string
+          format: date-time
+    RestaurantImage:
+      type: object
+      required: [url, position]
+      properties:
+        url:
+          type: string
+          format: uri
+        position:
+          type: integer
+          minimum: 0
     Menu:
       type: object
       required: [restaurant_id, categories]
@@ -267,7 +337,7 @@ components:
             $ref: "#/components/schemas/MenuItem"
     MenuItem:
       type: object
-      required: [id, name, description, price, available]
+      required: [id, name, description, price, available, image_url]
       properties:
         id:
           type: string
@@ -283,6 +353,11 @@ components:
           description: Цена в копейках
         available:
           type: boolean
+        image_url:
+          type: string
+          format: uri
+          nullable: true
+          description: Изображение позиции или null, если оно не задано
     CreateOrderRequest:
       type: object
       required: [customer_id, restaurant_id, items]

@@ -176,6 +176,143 @@ func (r *PostgresRepository) Get(ctx context.Context, id string) (Order, error) 
 	return order, nil
 }
 
+func (r *PostgresRepository) ListByCustomerID(ctx context.Context, customerID string) ([]Order, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return nil, fmt.Errorf("begin customer orders read transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	rows, err := tx.Query(ctx, `
+		SELECT o.id, o.customer_id, o.restaurant_id, o.status, o.total_price,
+		       o.external_order_id, o.rejection_reason, o.created_at, o.updated_at, r.integration_url
+		FROM orders o
+		JOIN restaurants r ON r.id = o.restaurant_id
+		WHERE o.customer_id = $1
+		ORDER BY o.created_at DESC, o.id`, customerID)
+	if err != nil {
+		return nil, fmt.Errorf("query customer orders: %w", err)
+	}
+
+	orders := make([]Order, 0)
+	orderIndexes := make(map[string]int)
+	for rows.Next() {
+		var order Order
+		var externalOrderID, rejectionReason pgtype.Text
+		if err = rows.Scan(
+			&order.ID, &order.CustomerID, &order.RestaurantID, &order.Status, &order.TotalPrice,
+			&externalOrderID, &rejectionReason, &order.CreatedAt, &order.UpdatedAt, &order.RestaurantIntegrationURL,
+		); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan customer order: %w", err)
+		}
+		if externalOrderID.Valid {
+			order.ExternalOrderID = externalOrderID.String
+		}
+		if rejectionReason.Valid {
+			order.RejectionReason = rejectionReason.String
+		}
+		order.Items = make([]OrderItem, 0)
+		order.StatusHistory = make([]StatusHistory, 0)
+		orderIndexes[order.ID] = len(orders)
+		orders = append(orders, order)
+	}
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		return nil, fmt.Errorf("iterate customer orders: %w", err)
+	}
+	rows.Close()
+
+	if len(orders) > 0 {
+		if err = loadCustomerOrderItems(ctx, tx, customerID, orders, orderIndexes); err != nil {
+			return nil, err
+		}
+		if err = loadCustomerOrderHistory(ctx, tx, customerID, orders, orderIndexes); err != nil {
+			return nil, err
+		}
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit customer orders read transaction: %w", err)
+	}
+	return orders, nil
+}
+
+func loadCustomerOrderItems(
+	ctx context.Context,
+	q querier,
+	customerID string,
+	orders []Order,
+	orderIndexes map[string]int,
+) error {
+	rows, err := q.Query(ctx, `
+		SELECT oi.order_id, oi.menu_item_id, oi.external_item_id, oi.name, oi.unit_price, oi.quantity
+		FROM order_items oi
+		JOIN orders o ON o.id = oi.order_id
+		WHERE o.customer_id = $1
+		ORDER BY o.created_at DESC, o.id, oi.created_at, oi.id`, customerID)
+	if err != nil {
+		return fmt.Errorf("query customer order items: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var orderID string
+		var item OrderItem
+		if err = rows.Scan(
+			&orderID, &item.MenuItemID, &item.ExternalItemID, &item.Name, &item.UnitPrice, &item.Quantity,
+		); err != nil {
+			return fmt.Errorf("scan customer order item: %w", err)
+		}
+		index, exists := orderIndexes[orderID]
+		if !exists {
+			return fmt.Errorf("customer order item references unknown order %s", orderID)
+		}
+		orders[index].Items = append(orders[index].Items, item)
+	}
+	if err = rows.Err(); err != nil {
+		return fmt.Errorf("iterate customer order items: %w", err)
+	}
+	return nil
+}
+
+func loadCustomerOrderHistory(
+	ctx context.Context,
+	q querier,
+	customerID string,
+	orders []Order,
+	orderIndexes map[string]int,
+) error {
+	rows, err := q.Query(ctx, `
+		SELECT h.order_id, h.previous_status, h.status, h.source, h.created_at
+		FROM order_status_history h
+		JOIN orders o ON o.id = h.order_id
+		WHERE o.customer_id = $1
+		ORDER BY o.created_at DESC, o.id, h.created_at, h.id`, customerID)
+	if err != nil {
+		return fmt.Errorf("query customer order history: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var orderID string
+		var history StatusHistory
+		var previousStatus pgtype.Text
+		if err = rows.Scan(&orderID, &previousStatus, &history.Status, &history.Source, &history.CreatedAt); err != nil {
+			return fmt.Errorf("scan customer order history: %w", err)
+		}
+		if previousStatus.Valid {
+			history.PreviousStatus = previousStatus.String
+		}
+		index, exists := orderIndexes[orderID]
+		if !exists {
+			return fmt.Errorf("customer order history references unknown order %s", orderID)
+		}
+		orders[index].StatusHistory = append(orders[index].StatusHistory, history)
+	}
+	if err = rows.Err(); err != nil {
+		return fmt.Errorf("iterate customer order history: %w", err)
+	}
+	return nil
+}
+
 func (r *PostgresRepository) ApplyRestaurantDecision(ctx context.Context, id string, decision RestaurantDecision) (Order, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {

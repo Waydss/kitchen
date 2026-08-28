@@ -30,6 +30,10 @@ type errorResponse struct {
 	Code string `json:"code"`
 }
 
+type ordersResponse struct {
+	Orders []orderResponse `json:"orders"`
+}
+
 func TestClientOrderFlowThroughKitchenAndRestaurant(t *testing.T) {
 	apiURL := os.Getenv("E2E_API_URL")
 	if apiURL == "" {
@@ -77,6 +81,38 @@ func TestClientOrderFlowThroughKitchenAndRestaurant(t *testing.T) {
 	}
 	if stored.ID != created.ID || stored.Status != "confirmed" || stored.ExternalOrderID != created.ExternalOrderID {
 		t.Fatalf("Kitchen PostgreSQL is not source of truth: %#v", stored)
+	}
+
+	listResponse, err := client.Get(apiURL + "/api/v1/orders?customer_id=" + customerID)
+	if err != nil {
+		t.Fatalf("list Kitchen orders: %v", err)
+	}
+	defer func() { _ = listResponse.Body.Close() }()
+	if listResponse.StatusCode != http.StatusOK {
+		t.Fatalf("expected list status 200, got %d", listResponse.StatusCode)
+	}
+	var listed ordersResponse
+	if err = json.NewDecoder(listResponse.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode customer orders: %v", err)
+	}
+	if len(listed.Orders) != 1 || listed.Orders[0].ID != created.ID || listed.Orders[0].Status != "confirmed" {
+		t.Fatalf("unexpected customer orders: %#v", listed.Orders)
+	}
+
+	emptyResponse, err := client.Get(apiURL + "/api/v1/orders?customer_id=" + uuid.NewString())
+	if err != nil {
+		t.Fatalf("list unknown customer orders: %v", err)
+	}
+	defer func() { _ = emptyResponse.Body.Close() }()
+	var empty ordersResponse
+	if emptyResponse.StatusCode != http.StatusOK {
+		t.Fatalf("expected empty list status 200, got %d", emptyResponse.StatusCode)
+	}
+	if err = json.NewDecoder(emptyResponse.Body).Decode(&empty); err != nil {
+		t.Fatalf("decode empty customer orders: %v", err)
+	}
+	if empty.Orders == nil || len(empty.Orders) != 0 {
+		t.Fatalf("expected empty orders array, got %#v", empty.Orders)
 	}
 }
 
