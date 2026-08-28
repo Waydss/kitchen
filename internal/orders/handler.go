@@ -43,6 +43,7 @@ func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 }
 
 func (h *Handler) createOrder(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
 	var request createOrderRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, errorResponse{Code: "invalid_request", Message: "invalid order payload"})
@@ -84,6 +85,7 @@ func (h *Handler) getOrder(c *gin.Context) {
 }
 
 func writeError(c *gin.Context, err error) {
+	_ = c.Error(err)
 	switch {
 	case errors.Is(err, ErrInvalidRequest):
 		c.JSON(http.StatusBadRequest, errorResponse{Code: "invalid_request", Message: "invalid order request"})

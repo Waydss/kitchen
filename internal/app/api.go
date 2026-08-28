@@ -8,11 +8,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"avito-kitchen/internal/catalog"
-	"avito-kitchen/internal/orders"
-	"avito-kitchen/internal/platform/config"
-	"avito-kitchen/internal/platform/httpserver"
-	"avito-kitchen/internal/platform/postgres"
+	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/catalog"
+	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/orders"
+	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/platform/config"
+	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/platform/httpserver"
+	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/platform/postgres"
 )
 
 func RunAPI(ctx context.Context, cfg config.API, logger *slog.Logger) error {
@@ -35,8 +35,15 @@ func NewAPIRouter(
 	logger *slog.Logger,
 ) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
+	gin.EnableJsonDecoderDisallowUnknownFields()
 	router := gin.New()
-	router.Use(gin.Recovery(), httpserver.CORS(swaggerOrigin), httpserver.RequestContext(logger))
+	router.Use(httpserver.Recovery(logger), httpserver.CORS(swaggerOrigin), httpserver.RequestContext(logger))
+	router.NoRoute(func(c *gin.Context) {
+		c.JSON(http.StatusNotFound, gin.H{"code": "route_not_found", "message": "route was not found"})
+	})
+	router.NoMethod(func(c *gin.Context) {
+		c.JSON(http.StatusMethodNotAllowed, gin.H{"code": "method_not_allowed", "message": "method is not allowed"})
+	})
 
 	router.GET("/health/live", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "service": "avito-kitchen-api"})

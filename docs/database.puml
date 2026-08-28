@@ -33,6 +33,7 @@ entity orders {
   total_price : bigint
   idempotency_key : text
   external_order_id : text
+  rejection_reason : text
 }
 entity order_items {
   * id : uuid <<PK>>

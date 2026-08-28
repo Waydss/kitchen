@@ -49,8 +49,22 @@ func TestHTTPRestaurantClientMapsUnavailableItemToRejection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("submit rejected order: %v", err)
 	}
-	if decision.Accepted {
+	if decision.Accepted || decision.RejectionReason != "item_unavailable" {
 		t.Fatalf("expected rejected decision: %#v", decision)
+	}
+}
+
+func TestHTTPRestaurantClientRejectsUnknownPartnerError(t *testing.T) {
+	httpClient := &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		return response(http.StatusConflict, `{"code":"unexpected_error"}`), nil
+	})}
+
+	_, err := NewHTTPRestaurantClient(httpClient).SubmitOrder(context.Background(), Order{
+		ID:                       testOrderID,
+		RestaurantIntegrationURL: "http://restaurant:8081/api/v1",
+	})
+	if !errors.Is(err, ErrInvalidPartnerResponse) {
+		t.Fatalf("expected invalid response error, got %v", err)
 	}
 }
 

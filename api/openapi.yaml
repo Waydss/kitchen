@@ -4,8 +4,8 @@ info:
   version: 0.1.0
   description: Публичный API web-клиента. Kitchen API является единственной точкой входа и источником истины по заказам.
   contact:
-    name: "TODO: укажите имя владельца API"
-    email: your-email@example.com
+    name: Григорьев Вадим
+    email: grigorevvadim875@yandex.ru 
 servers:
   - url: http://localhost:8080
 tags:
@@ -118,6 +118,12 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/CreateOrderRequest"
+            example:
+              customer_id: 50000000-0000-0000-0000-000000000001
+              restaurant_id: 10000000-0000-0000-0000-000000000001
+              items:
+                - menu_item_id: 30000000-0000-0000-0000-000000000001
+                  quantity: 1
       responses:
         "200":
           description: Идемпотентный повтор возвращает существующий заказ
@@ -163,6 +169,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
 components:
   parameters:
     RestaurantId:
@@ -318,9 +326,17 @@ components:
           format: uuid
         status:
           $ref: "#/components/schemas/OrderStatus"
+        external_order_id:
+          type: string
+          description: Идентификатор заказа у ресторана; появляется после принятия заказа партнёром
+        rejection_reason:
+          type: string
+          description: Машиночитаемая причина отказа; присутствует только для статуса rejected
+          enum: [item_unavailable, invalid_order, restaurant_rejected]
         total_price:
           type: integer
           format: int64
+          minimum: 1
           description: Итоговая цена в копейках
         items:
           type: array
@@ -336,14 +352,21 @@ components:
               unit_price:
                 type: integer
                 format: int64
+                minimum: 1
               quantity:
                 type: integer
+                minimum: 1
+                maximum: 20
         status_history:
           type: array
           items:
             type: object
             required: [status, source, created_at]
             properties:
+              previous_status:
+                allOf:
+                  - $ref: "#/components/schemas/OrderStatus"
+                nullable: true
               status:
                 $ref: "#/components/schemas/OrderStatus"
               source:

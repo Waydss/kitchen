@@ -15,6 +15,7 @@ type Order struct {
 	Status                   string          `json:"status"`
 	TotalPrice               int64           `json:"total_price"`
 	ExternalOrderID          string          `json:"external_order_id,omitempty"`
+	RejectionReason          string          `json:"rejection_reason,omitempty"`
 	Items                    []OrderItem     `json:"items"`
 	StatusHistory            []StatusHistory `json:"status_history"`
 	CreatedAt                time.Time       `json:"created_at"`
@@ -58,4 +59,5 @@ type CreateResult struct {
 type RestaurantDecision struct {
 	Accepted        bool
 	ExternalOrderID string
+	RejectionReason string
 }

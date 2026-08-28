@@ -4,57 +4,130 @@ info:
   version: 0.1.0
   description: Внутренний service-to-service контракт. Не предназначен для web-клиента и не публикуется на host.
   contact:
-    name: "TODO: укажите имя владельца API"
-    email: your-email@example.com
+    name: Григорьев Вадим
+    email: grigorevvadim875@yandex.ru 
 servers:
   - url: http://restaurant:8081
+tags:
+  - name: Health
+  - name: Restaurant
+  - name: Orders
 paths:
   /health/live:
     get:
+      tags: [Health]
       operationId: getRestaurantLiveness
       responses:
         "200":
           description: Сервис работает
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
   /api/v1/info:
     get:
+      tags: [Restaurant]
       operationId: getRestaurantInfo
       responses:
         "200":
           description: Идентификатор и название заведения
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RestaurantInfo"
   /api/v1/orders:
     post:
+      tags: [Orders]
       operationId: createRestaurantOrder
-      description: Повторный order_id возвращает ранее созданный заказ без повторного списания остатка.
+      description: Повторный order_id с тем же payload возвращает ранее созданный заказ без повторного списания остатка. Другой payload с тем же order_id возвращает idempotency_conflict.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [order_id, items]
-              properties:
-                order_id:
-                  type: string
-                  format: uuid
-                items:
-                  type: array
-                  minItems: 1
-                  items:
-                    type: object
-                    required: [external_item_id, quantity]
-                    properties:
-                      external_item_id:
-                        type: string
-                      quantity:
-                        type: integer
-                        minimum: 1
-                        maximum: 20
+              $ref: "#/components/schemas/CreateOrderRequest"
       responses:
         "201":
           description: Заказ принят
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateOrderResponse"
         "200":
           description: Идемпотентный повтор
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateOrderResponse"
         "400":
-          description: Некорректный запрос
+          description: Некорректный запрос или недоступная позиция
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "409":
-          description: Позиция отсутствует
+          description: Позиция недоступна или тот же order_id использован с другим payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  schemas:
+    Health:
+      type: object
+      required: [status, service]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        service:
+          type: string
+          enum: [example-restaurant]
+    RestaurantInfo:
+      type: object
+      required: [external_restaurant_id, name]
+      properties:
+        external_restaurant_id:
+          type: string
+        name:
+          type: string
+    CreateOrderRequest:
+      type: object
+      required: [order_id, items]
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        items:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: object
+            required: [external_item_id, quantity]
+            properties:
+              external_item_id:
+                type: string
+                minLength: 1
+              quantity:
+                type: integer
+                minimum: 1
+                maximum: 20
+    CreateOrderResponse:
+      type: object
+      required: [external_order_id, status]
+      properties:
+        external_order_id:
+          type: string
+        status:
+          type: string
+          enum: [accepted]
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [invalid_request, invalid_order, item_unavailable, idempotency_conflict]
+        message:
+          type: string

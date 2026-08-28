@@ -56,6 +56,7 @@ func (h *Handler) getMenu(c *gin.Context) {
 }
 
 func writeError(c *gin.Context, err error) {
+	_ = c.Error(err)
 	switch {
 	case errors.Is(err, ErrInvalidID):
 		c.JSON(http.StatusBadRequest, errorResponse{Code: "invalid_argument", Message: "restaurantId must be a UUID"})

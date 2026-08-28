@@ -26,6 +26,10 @@ type orderResponse struct {
 	ExternalOrderID string `json:"external_order_id"`
 }
 
+type errorResponse struct {
+	Code string `json:"code"`
+}
+
 func TestClientOrderFlowThroughKitchenAndRestaurant(t *testing.T) {
 	apiURL := os.Getenv("E2E_API_URL")
 	if apiURL == "" {
@@ -49,12 +53,21 @@ func TestClientOrderFlowThroughKitchenAndRestaurant(t *testing.T) {
 	if repeated.ID != created.ID || repeated.ExternalOrderID != created.ExternalOrderID {
 		t.Fatalf("idempotency violation: created=%#v repeated=%#v", created, repeated)
 	}
+	differentPayload := []byte(fmt.Sprintf(`{
+		"customer_id":%q,
+		"restaurant_id":%q,
+		"items":[{"menu_item_id":%q,"quantity":2}]
+	}`, customerID, demoRestaurantID, demoMenuItemID))
+	conflict := submitOrderError(t, client, apiURL, idempotencyKey, differentPayload, http.StatusConflict)
+	if conflict.Code != "idempotency_conflict" {
+		t.Fatalf("unexpected idempotency conflict: %#v", conflict)
+	}
 
 	response, err := client.Get(apiURL + "/api/v1/orders/" + created.ID)
 	if err != nil {
 		t.Fatalf("get Kitchen order: %v", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("expected GET status 200, got %d", response.StatusCode)
 	}
@@ -79,7 +92,7 @@ func submitOrder(t *testing.T, client *http.Client, apiURL, key string, payload 
 	if err != nil {
 		t.Fatalf("submit Kitchen order: %v", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != expectedStatus {
 		t.Fatalf("expected POST status %d, got %d", expectedStatus, response.StatusCode)
 	}
@@ -88,4 +101,27 @@ func submitOrder(t *testing.T, client *http.Client, apiURL, key string, payload 
 		t.Fatalf("decode order: %v", err)
 	}
 	return order
+}
+
+func submitOrderError(t *testing.T, client *http.Client, apiURL, key string, payload []byte, expectedStatus int) errorResponse {
+	t.Helper()
+	request, err := http.NewRequest(http.MethodPost, apiURL+"/api/v1/orders", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", key)
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatalf("submit conflicting Kitchen order: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != expectedStatus {
+		t.Fatalf("expected POST status %d, got %d", expectedStatus, response.StatusCode)
+	}
+	var responseError errorResponse
+	if err = json.NewDecoder(response.Body).Decode(&responseError); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	return responseError
 }

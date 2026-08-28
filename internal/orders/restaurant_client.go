@@ -72,7 +72,12 @@ func (c *HTTPRestaurantClient) SubmitOrder(ctx context.Context, order Order) (Re
 		if err = json.Unmarshal(limitedBody, &partnerError); err != nil || partnerError.Code == "" {
 			return RestaurantDecision{}, ErrInvalidPartnerResponse
 		}
-		return RestaurantDecision{Accepted: false}, nil
+		switch partnerError.Code {
+		case "item_unavailable", "invalid_order":
+			return RestaurantDecision{Accepted: false, RejectionReason: partnerError.Code}, nil
+		default:
+			return RestaurantDecision{}, ErrInvalidPartnerResponse
+		}
 	}
 	if response.StatusCode != http.StatusCreated && response.StatusCode != http.StatusOK {
 		return RestaurantDecision{}, fmt.Errorf("restaurant returned status %d: %w", response.StatusCode, ErrPartnerUnavailable)

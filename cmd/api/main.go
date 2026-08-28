@@ -7,8 +7,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"avito-kitchen/internal/app"
-	"avito-kitchen/internal/platform/config"
+	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/app"
+	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/platform/config"
 )
 
 func main() {

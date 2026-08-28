@@ -4,7 +4,7 @@ MVP backend-сервиса заказа еды. Kitchen API — единстве
 
 ## Быстрый запуск
 
-Нужны Docker и Docker Compose.
+Нужны Docker и Docker Compose. Для запуска Go-команд вне контейнеров используется Go `1.26.6`.
 
 ```bash
 cp .env.example .env  # необязательно
@@ -24,9 +24,9 @@ http://localhost:8082
 
 Также можно выполнить `make swagger`: команда поднимет стек и напечатает адрес интерфейса. Swagger UI загружает публичный контракт `api/openapi.yaml`. Кнопка `Try it out` отправляет запросы в Kitchen API на `http://localhost:8080`; для неё настроен ограниченный CORS только с origin Swagger UI.
 
-Название, версия, описание и владелец API задаются в секции `info` файла `api/openapi.yaml`. Перед публикацией замените `TODO` и `your-email@example.com` на свои данные. Аналогичная секция внутреннего контракта находится в `api/restaurant-openapi.yaml`.
+Название, версия, описание и владелец API задаются в секции `info` файла `api/openapi.yaml`; сейчас владельцем указан GitHub-логин `waydsk`. Если хотите опубликовать почту, добавьте поле `contact.email` в этот файл и в `api/restaurant-openapi.yaml`.
 
-Если локальный PostgreSQL уже занимает `5432`, задайте свободный host-порт в `.env`, например `POSTGRES_PORT=55432`. Внутри Compose сервисы по-прежнему используют `postgres:5432`.
+PostgreSQL публикуется только на loopback-интерфейсе и по умолчанию использует host-порт `55432`, чтобы не конфликтовать с локальным PostgreSQL на `5432`. Внутри Compose сервисы по-прежнему используют `postgres:5432`; порт можно изменить через `.env`.
 
 ## Публичный API Kitchen
 
@@ -57,9 +57,9 @@ curl -i http://localhost:8080/api/v1/orders \
   }'
 ```
 
-Kitchen проверяет заведение и позиции, рассчитывает цену из БД, сохраняет pending-заказ и снимки товаров, затем отправляет внутренний `order_id` и внешние SKU в restaurant service. Результат партнёра атомарно сохраняется как `confirmed` или `rejected` и только после этого возвращается клиенту. При сетевой ошибке клиент получает `202`, а заказ остаётся `restaurant_confirmation_pending`; повтор исходного запроса безопасно повторяет доставку того же `order_id`.
+Kitchen проверяет заведение и позиции, рассчитывает цену из БД, сохраняет pending-заказ и снимки товаров, затем отправляет внутренний `order_id` и внешние SKU в restaurant service. Результат партнёра атомарно сохраняется как `confirmed` или `rejected`; для отказа API также возвращает `rejection_reason`. При сетевой ошибке клиент получает `202`, а заказ остаётся `restaurant_confirmation_pending`; повтор исходного запроса безопасно повторяет доставку того же `order_id`.
 
-Идемпотентность клиента обеспечивается уникальным `(customer_id, idempotency_key)` в PostgreSQL. Тот же ключ с другим составом возвращает `409`. Example restaurant дедуплицирует внутренние запросы по неизменному Kitchen `order_id`, поэтому повтор не списывает остаток и не создаёт второй внешний заказ.
+Идемпотентность клиента обеспечивается уникальным `(customer_id, idempotency_key)` в PostgreSQL. Тот же ключ с другим составом возвращает `409`. Example restaurant хранит отпечаток нормализованного payload для каждого Kitchen `order_id`: точный повтор безопасен, а изменённый payload возвращает `idempotency_conflict` и не списывает остаток.
 
 Demo restaurant ID: `10000000-0000-0000-0000-000000000001`. Цена хранится в копейках: `59000` означает 590 ₽.
 
@@ -73,10 +73,13 @@ Demo restaurant ID: `10000000-0000-0000-0000-000000000001`. Цена храни�
 
 ```bash
 make fmt              # gofmt
+make check            # форматирование, go vet, unit-тесты и сборка
 make test             # unit-тесты с race detector
 make test-integration # repository и PostgreSQL
 make test-e2e         # Client → Kitchen → PostgreSQL → Restaurant → Kitchen
+make test-all         # все уровни тестов
 make lint             # golangci-lint
+make vuln             # govulncheck по актуальной базе Go
 make build            # сборка обоих бинарников
 make smoke            # запуск Compose и проверка публичного API
 make swagger          # запуск стека и адрес Swagger UI
@@ -85,6 +88,6 @@ make down             # остановка без удаления данных
 
 ## Документация и ограничения
 
-В `docs/` находятся CJM пользователя и заведения, C4 Container и ER-диаграмма в PlantUML. Конфигурация задаётся через environment; реальные секреты и `.env` не коммитятся.
+В `docs/` находятся CJM пользователя и заведения, C4 Container и ER-диаграмма в PlantUML. Конфигурация задаётся явно через environment; Compose автоматически читает `.env`, а значения по умолчанию находятся в `.env.example`. Дополнительная библиотека для `.env` не используется намеренно: бинарники не скрывают источник конфигурации, а реальные секреты и локальный `.env` не коммитятся. GitHub Actions запускает сборку, race-тесты, `go vet`, golangci-lint, govulncheck, integration/e2e и smoke-проверки.
 
 Authentication, оплата, frontend и доставка вне scope MVP. Остатки и дедупликация example restaurant пока хранятся в памяти и сбрасываются при рестарте. Для production потребовались бы долговременное хранилище партнёра, transactional outbox/worker, authentication внутреннего API, метрики и трассировка.

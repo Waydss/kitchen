@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -40,6 +41,12 @@ func LoadAPI() (API, error) {
 	if strings.TrimSpace(cfg.DatabaseURL) == "" {
 		return API{}, fmt.Errorf("DATABASE_URL must not be empty")
 	}
+	if strings.TrimSpace(cfg.HTTPAddress) == "" {
+		return API{}, fmt.Errorf("HTTP_ADDRESS must not be empty")
+	}
+	if err := validateHTTPURL("SWAGGER_ORIGIN", cfg.SwaggerOrigin); err != nil {
+		return API{}, err
+	}
 	return cfg, nil
 }
 
@@ -48,10 +55,14 @@ func LoadRestaurant() (Restaurant, error) {
 	if err != nil {
 		return Restaurant{}, err
 	}
-	return Restaurant{
+	cfg := Restaurant{
 		HTTPAddress:     env("HTTP_ADDRESS", ":8081"),
 		ShutdownTimeout: timeout,
-	}, nil
+	}
+	if strings.TrimSpace(cfg.HTTPAddress) == "" {
+		return Restaurant{}, fmt.Errorf("HTTP_ADDRESS must not be empty")
+	}
+	return cfg, nil
 }
 
 func env(key, fallback string) string {
@@ -71,4 +82,12 @@ func duration(key string, fallback time.Duration) (time.Duration, error) {
 		return 0, fmt.Errorf("%s must be positive", key)
 	}
 	return parsed, nil
+}
+
+func validateHTTPURL(key, value string) error {
+	parsed, err := url.ParseRequestURI(value)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.Path != "" {
+		return fmt.Errorf("%s must be an HTTP origin, for example http://localhost:8082", key)
+	}
+	return nil
 }

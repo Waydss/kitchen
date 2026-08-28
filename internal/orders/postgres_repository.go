@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -34,8 +35,14 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 }
 
 func (r *PostgresRepository) FindByIdempotencyKey(ctx context.Context, customerID, key string) (Order, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return Order{}, fmt.Errorf("begin idempotency read transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	var id string
-	err := r.pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		SELECT id
 		FROM orders
 		WHERE customer_id = $1 AND idempotency_key = $2`, customerID, key).Scan(&id)
@@ -45,7 +52,14 @@ func (r *PostgresRepository) FindByIdempotencyKey(ctx context.Context, customerI
 	if err != nil {
 		return Order{}, fmt.Errorf("query order by idempotency key: %w", err)
 	}
-	return loadOrder(ctx, r.pool, id)
+	order, err := loadOrder(ctx, tx, id)
+	if err != nil {
+		return Order{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return Order{}, fmt.Errorf("commit idempotency read transaction: %w", err)
+	}
+	return order, nil
 }
 
 func (r *PostgresRepository) CreatePending(ctx context.Context, command CreateCommand) (Order, bool, error) {
@@ -137,7 +151,7 @@ func (r *PostgresRepository) CreatePending(ctx context.Context, command CreateCo
 		return Order{}, false, fmt.Errorf("commit order: %w", err)
 	}
 
-	order, err := loadOrder(ctx, r.pool, orderID)
+	order, err := r.Get(ctx, orderID)
 	if err != nil {
 		return Order{}, false, err
 	}
@@ -146,7 +160,20 @@ func (r *PostgresRepository) CreatePending(ctx context.Context, command CreateCo
 }
 
 func (r *PostgresRepository) Get(ctx context.Context, id string) (Order, error) {
-	return loadOrder(ctx, r.pool, id)
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return Order{}, fmt.Errorf("begin order read transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	order, err := loadOrder(ctx, tx, id)
+	if err != nil {
+		return Order{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return Order{}, fmt.Errorf("commit order read transaction: %w", err)
+	}
+	return order, nil
 }
 
 func (r *PostgresRepository) ApplyRestaurantDecision(ctx context.Context, id string, decision RestaurantDecision) (Order, error) {
@@ -157,7 +184,12 @@ func (r *PostgresRepository) ApplyRestaurantDecision(ctx context.Context, id str
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	var currentStatus string
-	err = tx.QueryRow(ctx, `SELECT status FROM orders WHERE id = $1 FOR UPDATE`, id).Scan(&currentStatus)
+	var currentExternalOrderID, currentRejectionReason pgtype.Text
+	err = tx.QueryRow(ctx, `
+		SELECT status, external_order_id, rejection_reason
+		FROM orders
+		WHERE id = $1
+		FOR UPDATE`, id).Scan(&currentStatus, &currentExternalOrderID, &currentRejectionReason)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Order{}, ErrNotFound
 	}
@@ -167,9 +199,19 @@ func (r *PostgresRepository) ApplyRestaurantDecision(ctx context.Context, id str
 
 	targetStatus := StatusRejected
 	if decision.Accepted {
+		if strings.TrimSpace(decision.ExternalOrderID) == "" {
+			return Order{}, ErrInvalidTransition
+		}
 		targetStatus = StatusConfirmed
+		decision.RejectionReason = ""
+	} else if decision.RejectionReason == "" {
+		decision.RejectionReason = "restaurant_rejected"
 	}
 	if currentStatus == targetStatus {
+		if (targetStatus == StatusConfirmed && currentExternalOrderID.String != decision.ExternalOrderID) ||
+			(targetStatus == StatusRejected && currentRejectionReason.String != decision.RejectionReason) {
+			return Order{}, ErrInvalidTransition
+		}
 		if err = tx.Rollback(ctx); err != nil {
 			return Order{}, fmt.Errorf("rollback unchanged decision: %w", err)
 		}
@@ -181,8 +223,11 @@ func (r *PostgresRepository) ApplyRestaurantDecision(ctx context.Context, id str
 
 	_, err = tx.Exec(ctx, `
 		UPDATE orders
-		SET status = $2, external_order_id = NULLIF($3, ''), updated_at = now()
-		WHERE id = $1`, id, targetStatus, decision.ExternalOrderID)
+		SET status = $2,
+		    external_order_id = NULLIF($3, ''),
+		    rejection_reason = NULLIF($4, ''),
+		    updated_at = now()
+		WHERE id = $1`, id, targetStatus, decision.ExternalOrderID, decision.RejectionReason)
 	if err != nil {
 		return Order{}, fmt.Errorf("update order decision: %w", err)
 	}
@@ -200,15 +245,15 @@ func (r *PostgresRepository) ApplyRestaurantDecision(ctx context.Context, id str
 
 func loadOrder(ctx context.Context, q querier, id string) (Order, error) {
 	var order Order
-	var externalOrderID pgtype.Text
+	var externalOrderID, rejectionReason pgtype.Text
 	err := q.QueryRow(ctx, `
 		SELECT o.id, o.customer_id, o.restaurant_id, o.status, o.total_price,
-		       o.external_order_id, o.created_at, o.updated_at, r.integration_url
+		       o.external_order_id, o.rejection_reason, o.created_at, o.updated_at, r.integration_url
 		FROM orders o
 		JOIN restaurants r ON r.id = o.restaurant_id
 		WHERE o.id = $1`, id).Scan(
 		&order.ID, &order.CustomerID, &order.RestaurantID, &order.Status, &order.TotalPrice,
-		&externalOrderID, &order.CreatedAt, &order.UpdatedAt, &order.RestaurantIntegrationURL,
+		&externalOrderID, &rejectionReason, &order.CreatedAt, &order.UpdatedAt, &order.RestaurantIntegrationURL,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Order{}, ErrNotFound
@@ -218,6 +263,9 @@ func loadOrder(ctx context.Context, q querier, id string) (Order, error) {
 	}
 	if externalOrderID.Valid {
 		order.ExternalOrderID = externalOrderID.String
+	}
+	if rejectionReason.Valid {
+		order.RejectionReason = rejectionReason.String
 	}
 
 	itemRows, err := q.Query(ctx, `
