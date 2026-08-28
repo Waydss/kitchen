@@ -73,3 +73,32 @@ func TestGetRestaurantNormalizesMissingImagesToArray(t *testing.T) {
 		t.Fatalf("expected empty images array, got %#v", restaurant.Images)
 	}
 }
+
+func TestListRestaurantsNormalizesEmptyResult(t *testing.T) {
+	service := NewService(repositoryStub{})
+	restaurants, err := service.ListRestaurants(context.Background())
+	if err != nil || restaurants == nil || len(restaurants) != 0 {
+		t.Fatalf("unexpected result: %#v, %v", restaurants, err)
+	}
+}
+
+func TestListRestaurantsPropagatesRepositoryError(t *testing.T) {
+	service := NewService(repositoryStub{err: errors.New("query failed")})
+	if _, err := service.ListRestaurants(context.Background()); err == nil {
+		t.Fatal("expected repository error")
+	}
+}
+
+func TestGetMenuRejectsInvalidRestaurantID(t *testing.T) {
+	service := NewService(repositoryStub{})
+	if _, err := service.GetMenu(context.Background(), "invalid"); !errors.Is(err, ErrInvalidID) {
+		t.Fatalf("expected ErrInvalidID, got %v", err)
+	}
+}
+
+func TestGetMenuPreservesRestaurantNotFound(t *testing.T) {
+	service := NewService(repositoryStub{err: ErrNotFound})
+	if _, err := service.GetMenu(context.Background(), testRestaurantID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}

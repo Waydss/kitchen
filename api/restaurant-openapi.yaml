@@ -5,7 +5,7 @@ info:
   description: Внутренний service-to-service контракт. Не предназначен для web-клиента и не публикуется на host.
   contact:
     name: Григорьев Вадим
-    email: grigorevvadim875@yandex.ru 
+    email: grigorevvadim875@yandex.ru
 servers:
   - url: http://restaurant:8081
 tags:
@@ -60,7 +60,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreateOrderResponse"
         "400":
-          description: Некорректный запрос или недоступная позиция
+          description: Некорректный JSON или состав заказа
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: Тело запроса превышает 1 MiB
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "415":
+          description: Content-Type должен быть application/json
           content:
             application/json:
               schema:
@@ -119,6 +131,7 @@ components:
       properties:
         external_order_id:
           type: string
+          format: uuid
         status:
           type: string
           enum: [accepted]
@@ -128,6 +141,6 @@ components:
       properties:
         code:
           type: string
-          enum: [invalid_request, invalid_order, item_unavailable, idempotency_conflict]
+          enum: [invalid_request, invalid_order, item_unavailable, idempotency_conflict, request_too_large, unsupported_media_type]
         message:
           type: string

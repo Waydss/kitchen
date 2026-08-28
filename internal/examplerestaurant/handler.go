@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sort"
 	"strings"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+
+	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/platform/httpserver"
 )
 
 type Handler struct {
@@ -69,9 +72,17 @@ func (h *Handler) info(c *gin.Context) {
 }
 
 func (h *Handler) createOrder(c *gin.Context) {
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
 	var request orderRequest
-	if err := c.ShouldBindJSON(&request); err != nil {
+	if err := httpserver.BindJSON(c, &request, 1<<20); err != nil {
+		var maxBytesError *http.MaxBytesError
+		if errors.As(err, &maxBytesError) {
+			c.JSON(http.StatusRequestEntityTooLarge, errorResponse{Code: "request_too_large", Message: "request body exceeds 1 MiB"})
+			return
+		}
+		if errors.Is(err, httpserver.ErrUnsupportedMediaType) {
+			c.JSON(http.StatusUnsupportedMediaType, errorResponse{Code: "unsupported_media_type", Message: err.Error()})
+			return
+		}
 		c.JSON(http.StatusBadRequest, errorResponse{Code: "invalid_request", Message: "invalid order payload"})
 		return
 	}

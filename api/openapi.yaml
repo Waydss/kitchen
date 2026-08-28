@@ -5,7 +5,7 @@ info:
   description: Публичный API web-клиента. Kitchen API является единственной точкой входа и источником истины по заказам.
   contact:
     name: Григорьев Вадим
-    email: grigorevvadim875@yandex.ru 
+    email: grigorevvadim875@yandex.ru
 servers:
   - url: http://localhost:8080
 tags:
@@ -39,6 +39,10 @@ paths:
                 $ref: "#/components/schemas/Health"
         "503":
           description: PostgreSQL недоступен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
   /api/v1/restaurants:
     get:
       tags: [Restaurants]
@@ -182,6 +186,10 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/RequestTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
         "500":
           $ref: "#/components/responses/InternalError"
   /api/v1/orders/{orderId}:
@@ -241,6 +249,18 @@ components:
             $ref: "#/components/schemas/Error"
     InternalError:
       description: Внутренняя ошибка
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RequestTooLarge:
+      description: Тело запроса превышает 1 MiB
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    UnsupportedMediaType:
+      description: Content-Type должен быть application/json
       content:
         application/json:
           schema:
@@ -385,6 +405,7 @@ components:
                 maximum: 20
     OrderStatus:
       type: string
+      description: В текущем MVP автоматически используются restaurant_confirmation_pending, confirmed и rejected; остальные значения зарезервированы для развития жизненного цикла.
       enum: [restaurant_confirmation_pending, confirmed, rejected, preparing, ready, delivering, delivered, cancelled]
     Order:
       type: object

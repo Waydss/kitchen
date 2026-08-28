@@ -82,6 +82,79 @@ func TestHTTPRestaurantClientRejectsInvalidResponse(t *testing.T) {
 	}
 }
 
+func TestHTTPRestaurantClientHandlesTransportAndPartnerFailures(t *testing.T) {
+	tests := []struct {
+		name      string
+		transport roundTripperFunc
+		want      error
+	}{
+		{
+			name: "transport error",
+			transport: func(*http.Request) (*http.Response, error) {
+				return nil, errors.New("connection refused")
+			},
+		},
+		{
+			name: "temporary status",
+			transport: func(*http.Request) (*http.Response, error) {
+				return response(http.StatusServiceUnavailable, `{}`), nil
+			},
+			want: ErrPartnerUnavailable,
+		},
+		{
+			name: "invalid conflict body",
+			transport: func(*http.Request) (*http.Response, error) {
+				return response(http.StatusConflict, `{`), nil
+			},
+			want: ErrInvalidPartnerResponse,
+		},
+		{
+			name: "invalid success JSON",
+			transport: func(*http.Request) (*http.Response, error) {
+				return response(http.StatusCreated, `{`), nil
+			},
+			want: ErrInvalidPartnerResponse,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := NewHTTPRestaurantClient(&http.Client{Transport: test.transport})
+			_, err := client.SubmitOrder(context.Background(), Order{
+				ID:                       testOrderID,
+				RestaurantIntegrationURL: "http://restaurant:8081/api/v1",
+			})
+			if err == nil || (test.want != nil && !errors.Is(err, test.want)) {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestHTTPRestaurantClientAcceptsConfirmedRepeat(t *testing.T) {
+	httpClient := &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		return response(http.StatusOK, `{"external_order_id":"restaurant-order-1","status":"confirmed"}`), nil
+	})}
+
+	decision, err := NewHTTPRestaurantClient(httpClient).SubmitOrder(context.Background(), Order{
+		ID:                       testOrderID,
+		RestaurantIntegrationURL: "http://restaurant:8081/api/v1/",
+	})
+	if err != nil || !decision.Accepted || decision.ExternalOrderID != "restaurant-order-1" {
+		t.Fatalf("unexpected decision: %#v, %v", decision, err)
+	}
+}
+
+func TestHTTPRestaurantClientRejectsInvalidIntegrationURL(t *testing.T) {
+	_, err := NewHTTPRestaurantClient(http.DefaultClient).SubmitOrder(context.Background(), Order{
+		ID:                       testOrderID,
+		RestaurantIntegrationURL: "://invalid",
+	})
+	if err == nil {
+		t.Fatal("expected request creation error")
+	}
+}
+
 func response(status int, body string) *http.Response {
 	return &http.Response{
 		StatusCode: status,

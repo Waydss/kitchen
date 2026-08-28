@@ -9,12 +9,11 @@ else (нет)
   if (Все позиции доступны?) then (да)
     :Резервирует позиции;
     :Подтверждает заказ;
-    :Сообщает confirmed в Авито.Кухню;
-    :Меняет статус на preparing;
-    :Сообщает ready;
+    :Возвращает accepted в Kitchen API;
   else (нет)
-    :Отклоняет заказ с причиной item_unavailable;
+    :Возвращает item_unavailable;
   endif
 endif
+:Kitchen API сохраняет confirmed или rejected;
 stop
 @enduml

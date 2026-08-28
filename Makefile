@@ -1,4 +1,4 @@
-.PHONY: env up down logs swagger build fmt fmt-check vet lint vuln test test-integration test-e2e test-all check migrate smoke
+.PHONY: env up down logs swagger build fmt fmt-check vet lint vuln test test-integration coverage test-e2e test-all check migrate smoke
 
 env:
 	@test -f .env || cp .env.example .env
@@ -38,8 +38,17 @@ test:
 	go test ./... -race -count=1
 
 test-integration:
-	docker compose up -d --wait postgres migrate
+	docker compose up -d --wait postgres
+	docker compose run --rm migrate
 	TEST_DATABASE_URL="postgres://$${POSTGRES_USER:-kitchen}:$${POSTGRES_PASSWORD:-kitchen}@localhost:$${POSTGRES_PORT:-55432}/$${POSTGRES_DB:-kitchen}?sslmode=disable" go test -tags=integration ./... -count=1
+
+coverage:
+	docker compose up -d --wait postgres
+	docker compose run --rm migrate
+	TEST_DATABASE_URL="postgres://$${POSTGRES_USER:-kitchen}:$${POSTGRES_PASSWORD:-kitchen}@localhost:$${POSTGRES_PORT:-55432}/$${POSTGRES_DB:-kitchen}?sslmode=disable" go test -tags=integration ./... -coverprofile=coverage.out -count=1
+	@coverage=$$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%", "", $$3); print $$3}'); \
+		echo "Total coverage: $$coverage%"; \
+		awk -v coverage="$$coverage" 'BEGIN { if (coverage < 60) exit 1 }'
 
 test-e2e: up
 	E2E_API_URL="http://localhost:$${API_PORT:-8080}" go test -tags=e2e ./tests/e2e -count=1

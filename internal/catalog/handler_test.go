@@ -3,6 +3,7 @@ package catalog
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -153,5 +154,34 @@ func TestGetMenuReturnsNullableImageURLs(t *testing.T) {
 	items := menu.Categories[0].Items
 	if items[0].ImageURL == nil || *items[0].ImageURL != imageURL || items[1].ImageURL != nil {
 		t.Fatalf("unexpected image URLs: %#v", items)
+	}
+}
+
+func TestCatalogHandlerMapsErrors(t *testing.T) {
+	tests := []struct {
+		name   string
+		err    error
+		status int
+		code   string
+	}{
+		{name: "not found", err: ErrNotFound, status: http.StatusNotFound, code: "restaurant_not_found"},
+		{name: "internal", err: errors.New("database secret"), status: http.StatusInternalServerError, code: "internal_error"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			router := gin.New()
+			NewHandler(serviceStub{err: test.err}).RegisterRoutes(router.Group("/api/v1"))
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/restaurants", nil))
+
+			if response.Code != test.status || !strings.Contains(response.Body.String(), `"code":"`+test.code+`"`) {
+				t.Fatalf("unexpected response: %d %s", response.Code, response.Body.String())
+			}
+			if strings.Contains(response.Body.String(), "secret") {
+				t.Fatal("internal details leaked")
+			}
+		})
 	}
 }

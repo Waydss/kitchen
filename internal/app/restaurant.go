@@ -20,8 +20,8 @@ func RunRestaurant(ctx context.Context, cfg config.Restaurant, logger *slog.Logg
 
 func NewRestaurantRouter(logger *slog.Logger) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
-	gin.EnableJsonDecoderDisallowUnknownFields()
 	router := gin.New()
+	router.HandleMethodNotAllowed = true
 	router.Use(httpserver.Recovery(logger), httpserver.RequestContext(logger))
 	router.NoRoute(func(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": "route_not_found", "message": "route was not found"})

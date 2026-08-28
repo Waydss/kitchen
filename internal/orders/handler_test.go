@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -75,6 +76,51 @@ func TestCreateOrderReturnsAcceptedWhenPartnerIsUnavailable(t *testing.T) {
 	}
 }
 
+func TestCreateOrderReturnsOKForIdempotentRepeat(t *testing.T) {
+	service := &orderServiceStub{result: CreateResult{Order: testOrder(StatusConfirmed), Created: false}}
+	router := testOrderRouter(service)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/orders", bytes.NewBufferString(validCreateOrderJSON()))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", "handler-test-key")
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, response.Code, response.Body.String())
+	}
+}
+
+func TestCreateOrderRejectsInvalidHTTPPayload(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        string
+		contentType string
+		status      int
+	}{
+		{name: "malformed JSON", body: `{"customer_id":`, contentType: "application/json", status: http.StatusBadRequest},
+		{name: "unknown field", body: `{"customer_id":"50000000-0000-0000-0000-000000000001","restaurant_id":"10000000-0000-0000-0000-000000000001","items":[],"extra":true}`, contentType: "application/json", status: http.StatusBadRequest},
+		{name: "trailing object", body: validCreateOrderJSON() + `{}`, contentType: "application/json", status: http.StatusBadRequest},
+		{name: "oversized", body: `{"padding":"` + strings.Repeat("x", 1<<20) + `"}`, contentType: "application/json", status: http.StatusRequestEntityTooLarge},
+		{name: "wrong content type", body: validCreateOrderJSON(), contentType: "text/plain", status: http.StatusUnsupportedMediaType},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			service := &orderServiceStub{}
+			router := testOrderRouter(service)
+			request := httptest.NewRequest(http.MethodPost, "/api/v1/orders", bytes.NewBufferString(test.body))
+			request.Header.Set("Content-Type", test.contentType)
+			request.Header.Set("Idempotency-Key", "handler-test-key")
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+
+			if response.Code != test.status {
+				t.Fatalf("expected status %d, got %d: %s", test.status, response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
 func TestCreateOrderMapsIdempotencyConflict(t *testing.T) {
 	service := &orderServiceStub{err: ErrIdempotencyConflict}
 	router := testOrderRouter(service)
@@ -106,6 +152,50 @@ func TestWriteErrorDoesNotExposeInternalDetails(t *testing.T) {
 	router.ServeHTTP(response, request)
 
 	if response.Code != http.StatusInternalServerError || bytes.Contains(response.Body.Bytes(), []byte("password")) {
+		t.Fatalf("unexpected response: %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestOrderHandlerMapsDomainErrors(t *testing.T) {
+	tests := []struct {
+		name   string
+		err    error
+		status int
+		code   string
+	}{
+		{name: "invalid", err: ErrInvalidRequest, status: http.StatusBadRequest, code: "invalid_request"},
+		{name: "restaurant not found", err: ErrRestaurantNotFound, status: http.StatusNotFound, code: "restaurant_not_found"},
+		{name: "menu item not found", err: ErrMenuItemNotFound, status: http.StatusNotFound, code: "menu_item_not_found"},
+		{name: "order not found", err: ErrNotFound, status: http.StatusNotFound, code: "order_not_found"},
+		{name: "restaurant unavailable", err: ErrRestaurantUnavailable, status: http.StatusConflict, code: "restaurant_unavailable"},
+		{name: "menu item unavailable", err: ErrMenuItemUnavailable, status: http.StatusConflict, code: "menu_item_unavailable"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			service := &orderServiceStub{err: test.err}
+			router := testOrderRouter(service)
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/orders/"+testOrderID, nil))
+
+			var body errorResponse
+			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if response.Code != test.status || body.Code != test.code {
+				t.Fatalf("unexpected response: %d %#v", response.Code, body)
+			}
+		})
+	}
+}
+
+func TestGetOrderReturnsOrder(t *testing.T) {
+	service := &orderServiceStub{order: testOrder(StatusConfirmed)}
+	router := testOrderRouter(service)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/orders/"+testOrderID, nil))
+
+	if response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte(testOrderID)) {
 		t.Fatalf("unexpected response: %d %s", response.Code, response.Body.String())
 	}
 }

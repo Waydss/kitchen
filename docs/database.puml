@@ -41,8 +41,8 @@ entity orders {
   status : text
   total_price : bigint
   idempotency_key : text
-  external_order_id : text
-  rejection_reason : text
+  external_order_id : text <<nullable>>
+  rejection_reason : text <<nullable>>
 }
 entity order_items {
   * id : uuid <<PK>>
@@ -70,4 +70,9 @@ restaurants ||--o{ orders
 orders ||--|{ order_items
 menu_items ||--o{ order_items
 orders ||--|{ order_status_history
+
+note right of restaurant_images
+  Если у заведения есть изображения,
+  ровно одно из них является обложкой.
+end note
 @enduml

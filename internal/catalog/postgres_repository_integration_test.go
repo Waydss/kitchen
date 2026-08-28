@@ -92,4 +92,19 @@ func TestPostgresRepositoryReadsSeededCatalog(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected database to reject a second cover image")
 	}
+
+	missingCoverTx, err := pool.Begin(context.Background())
+	if err != nil {
+		t.Fatalf("begin missing cover constraint check: %v", err)
+	}
+	defer func() { _ = missingCoverTx.Rollback(context.Background()) }()
+	_, err = missingCoverTx.Exec(context.Background(), `
+		INSERT INTO restaurant_images (restaurant_id, url, position, is_cover)
+		VALUES ($1, 'https://example.com/non-cover.jpg', 0, false)`, testRestaurantWithoutImagesID)
+	if err != nil {
+		t.Fatalf("insert deferred non-cover image: %v", err)
+	}
+	if err = missingCoverTx.Commit(context.Background()); err == nil {
+		t.Fatal("expected database to reject an image set without a cover")
+	}
 }

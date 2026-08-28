@@ -3,7 +3,6 @@ title Авито.Кухня — C4 Container
 skinparam componentStyle rectangle
 
 actor "Пользователь" as user
-actor "Сотрудник заведения" as staff
 rectangle "Web-клиент\n[Container: browser]" as web
 rectangle "Авито.Кухня API\n[Container: Go/Gin]" as api
 database "PostgreSQL\n[Container: database]" as db
@@ -12,12 +11,11 @@ rectangle "Example Restaurant\n[Container: Go/Gin]" as restaurant
 user --> web : выбирает блюда, следит за заказом
 web --> api : JSON/HTTPS
 api --> db : SQL/pgx
-api --> restaurant : заказ, HTTP/JSON
-restaurant --> api : статус заказа, HTTP/JSON
-staff --> restaurant : подтверждает и готовит заказ
+api --> restaurant : передаёт заказ, HTTP/JSON
+restaurant --> api : синхронное решение accepted/rejected
 
 note bottom of api
-  Каталог, заказы, status machine,
+  Каталог, заказы, начальные статусы,
   идемпотентность и интеграция
 end note
 @enduml
