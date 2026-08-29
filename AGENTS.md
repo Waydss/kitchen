@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This Go repository contains two binaries: `cmd/api` for the public Kitchen API and `cmd/restaurant` for the internal partner simulator. Business capabilities live in `internal/catalog`, `internal/orders`, and `internal/examplerestaurant`; shared infrastructure is under `internal/platform`. Keep SQL changes as paired, ordered files in `migrations/`. Public and internal contracts are `api/openapi.yaml` and `api/restaurant-openapi.yaml`. PlantUML architecture artifacts live in `docs/`, while full-stack tests are in `tests/e2e`.
+This Go repository contains two binaries: `cmd/api` for the public Kitchen API and `cmd/restaurant` for the internal partner simulator. Business capabilities live in `internal/catalog`, `internal/order`, and `internal/restaurant`; infrastructure packages are `internal/config`, `internal/httpserver`, and `internal/postgres`. Keep SQL changes as paired, ordered files in `migrations/`. Public and internal contracts are `api/kitchen-openapi.yaml` and `api/restaurant-openapi.yaml`. PlantUML sources and rendered diagrams live in `docs/diagrams`, while full-stack tests are in `tests/e2e`.
 
 ## Build, Test, and Development Commands
 

@@ -1,4 +1,4 @@
-package examplerestaurant
+package restaurant
 
 import (
 	"crypto/sha256"
@@ -13,7 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/platform/httpserver"
+	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/httpserver"
 )
 
 type Handler struct {

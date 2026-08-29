@@ -1,6 +1,8 @@
 package httpserver
 
 import (
+	"bytes"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -28,6 +30,24 @@ func TestRequestContextPreservesOrCreatesRequestID(t *testing.T) {
 				t.Fatalf("unexpected request id: %q", actual)
 			}
 		})
+	}
+}
+
+func TestRequestContextLogsHandledErrorDetails(t *testing.T) {
+	var output bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&output, nil))
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(RequestContext(logger))
+	router.GET("/", func(c *gin.Context) {
+		_ = c.Error(errors.New("restaurant request timed out"))
+		c.Status(http.StatusAccepted)
+	})
+
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	if response.Code != http.StatusAccepted || !bytes.Contains(output.Bytes(), []byte("restaurant request timed out")) {
+		t.Fatalf("handled error was not logged: status=%d log=%s", response.Code, output.String())
 	}
 }
 

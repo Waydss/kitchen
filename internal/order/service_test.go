@@ -1,4 +1,4 @@
-package orders
+package order
 
 import (
 	"context"
@@ -136,6 +136,21 @@ func TestPartnerFailureKeepsOrderPending(t *testing.T) {
 	}
 	if !result.Pending || result.Order.Status != StatusPending || repository.updateCalls != 0 {
 		t.Fatalf("unexpected pending result: %#v", result)
+	}
+}
+
+func TestInvalidPartnerResponseIsNotReportedAsTemporaryUnavailability(t *testing.T) {
+	pending := testOrder(StatusPending)
+	repository := &repositoryStub{findErr: ErrNotFound, createResult: pending}
+	client := &restaurantClientStub{err: ErrInvalidPartnerResponse}
+	service := NewService(repository, client)
+
+	result, err := service.Create(context.Background(), testCommand())
+	if !errors.Is(err, ErrInvalidPartnerResponse) {
+		t.Fatalf("expected ErrInvalidPartnerResponse, got %v", err)
+	}
+	if result.Order.ID != "" || repository.updateCalls != 0 {
+		t.Fatalf("invalid partner response must not be reported as a retryable result: %#v", result)
 	}
 }
 

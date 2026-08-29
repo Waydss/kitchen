@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: Example Restaurant API
+  title: Restaurant API
   version: 0.1.0
   description: Внутренний service-to-service контракт. Не предназначен для web-клиента и не публикуется на host.
   contact:
@@ -94,7 +94,7 @@ components:
           enum: [ok]
         service:
           type: string
-          enum: [example-restaurant]
+          enum: [restaurant]
     RestaurantInfo:
       type: object
       required: [external_restaurant_id, name]

@@ -1,4 +1,4 @@
-package orders
+package order
 
 import (
 	"context"
@@ -75,7 +75,10 @@ func (s *Service) submitPending(ctx context.Context, order Order, created bool) 
 
 	decision, err := s.restaurantClient.SubmitOrder(ctx, order)
 	if err != nil {
-		return CreateResult{Order: order, Created: created, Pending: true}, ErrPartnerUnavailable
+		if errors.Is(err, ErrPartnerUnavailable) {
+			return CreateResult{Order: order, Created: created, Pending: true}, fmt.Errorf("submit pending order: %w", err)
+		}
+		return CreateResult{}, fmt.Errorf("submit restaurant order: %w", err)
 	}
 	order, err = s.repository.ApplyRestaurantDecision(ctx, order.ID, decision)
 	if err != nil {

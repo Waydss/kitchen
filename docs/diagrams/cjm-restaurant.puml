@@ -1,7 +1,7 @@
 @startuml
 title CJM заведения
 start
-:Example restaurant получает заказ по HTTP;
+:Restaurant Service получает заказ по HTTP;
 if (order_id уже обработан?) then (да)
   :Возвращает сохранённый результат;
 else (нет)

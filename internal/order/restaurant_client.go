@@ -1,4 +1,4 @@
-package orders
+package order
 
 import (
 	"bytes"
@@ -59,13 +59,13 @@ func (c *HTTPRestaurantClient) SubmitOrder(ctx context.Context, order Order) (Re
 
 	response, err := c.client.Do(request)
 	if err != nil {
-		return RestaurantDecision{}, fmt.Errorf("submit restaurant order: %w", err)
+		return RestaurantDecision{}, fmt.Errorf("submit restaurant order: %w: %v", ErrPartnerUnavailable, err)
 	}
 	defer func() { _ = response.Body.Close() }()
 
 	limitedBody, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	if err != nil {
-		return RestaurantDecision{}, fmt.Errorf("read restaurant response: %w", err)
+		return RestaurantDecision{}, fmt.Errorf("read restaurant response: %w: %v", ErrPartnerUnavailable, err)
 	}
 	if response.StatusCode == http.StatusConflict || response.StatusCode == http.StatusBadRequest {
 		var partnerError restaurantErrorResponse
@@ -79,8 +79,13 @@ func (c *HTTPRestaurantClient) SubmitOrder(ctx context.Context, order Order) (Re
 			return RestaurantDecision{}, ErrInvalidPartnerResponse
 		}
 	}
-	if response.StatusCode != http.StatusCreated && response.StatusCode != http.StatusOK {
+	if response.StatusCode >= http.StatusInternalServerError ||
+		response.StatusCode == http.StatusRequestTimeout ||
+		response.StatusCode == http.StatusTooManyRequests {
 		return RestaurantDecision{}, fmt.Errorf("restaurant returned status %d: %w", response.StatusCode, ErrPartnerUnavailable)
+	}
+	if response.StatusCode != http.StatusCreated && response.StatusCode != http.StatusOK {
+		return RestaurantDecision{}, fmt.Errorf("restaurant returned unexpected status %d: %w", response.StatusCode, ErrInvalidPartnerResponse)
 	}
 
 	var result restaurantOrderResponse

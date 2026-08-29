@@ -1,4 +1,4 @@
-package orders
+package order
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/platform/httpserver"
+	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/httpserver"
 )
 
 type OrderService interface {
@@ -77,6 +77,7 @@ func (h *Handler) createOrder(c *gin.Context) {
 		Items:          items,
 	})
 	if errors.Is(err, ErrPartnerUnavailable) && result.Order.ID != "" {
+		_ = c.Error(err)
 		c.JSON(http.StatusAccepted, result.Order)
 		return
 	}

@@ -42,8 +42,10 @@ func RequestContext(logger *slog.Logger) gin.HandlerFunc {
 			"status", c.Writer.Status(),
 			"duration_ms", time.Since(started).Milliseconds(),
 		}
-		if c.Writer.Status() >= http.StatusInternalServerError && len(c.Errors) > 0 {
+		if len(c.Errors) > 0 {
 			attributes = append(attributes, "error", c.Errors.Last().Err)
+		}
+		if c.Writer.Status() >= http.StatusInternalServerError {
 			logger.Error("http request failed", attributes...)
 			return
 		}

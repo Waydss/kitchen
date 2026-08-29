@@ -10,23 +10,23 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/orders"
+	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/order"
 )
 
 type restaurantClientStub struct{}
 
-func (restaurantClientStub) SubmitOrder(context.Context, orders.Order) (orders.RestaurantDecision, error) {
-	return orders.RestaurantDecision{}, nil
+func (restaurantClientStub) SubmitOrder(context.Context, order.Order) (order.RestaurantDecision, error) {
+	return order.RestaurantDecision{}, nil
 }
 
-func TestAPIRouterInfrastructureEndpoints(t *testing.T) {
+func TestKitchenRouterInfrastructureEndpoints(t *testing.T) {
 	pool, err := pgxpool.New(context.Background(), "postgres://invalid:invalid@127.0.0.1:1/invalid?sslmode=disable&connect_timeout=1")
 	if err != nil {
 		t.Fatalf("create unavailable pool: %v", err)
 	}
 	t.Cleanup(pool.Close)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	router := NewAPIRouter(pool, restaurantClientStub{}, "http://localhost:8082", logger)
+	router := NewKitchenRouter(pool, restaurantClientStub{}, "http://localhost:8082", logger)
 
 	tests := []struct {
 		name   string

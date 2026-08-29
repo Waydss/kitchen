@@ -14,6 +14,6 @@ curl -fsS -X POST "$API_URL/api/v1/orders" \
     -H "Idempotency-Key: smoke-order-0001" \
     -d '{"customer_id":"50000000-0000-0000-0000-000000000001","restaurant_id":"10000000-0000-0000-0000-000000000001","items":[{"menu_item_id":"30000000-0000-0000-0000-000000000001","quantity":1}]}' >/dev/null
 curl -fsS "$SWAGGER_URL/" >/dev/null
-curl -fsS "$SWAGGER_URL/openapi.yaml" >/dev/null
+curl -fsS "$SWAGGER_URL/kitchen-openapi.yaml" >/dev/null
 
 echo "Smoke test passed"

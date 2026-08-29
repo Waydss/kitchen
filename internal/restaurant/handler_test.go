@@ -1,4 +1,4 @@
-package examplerestaurant
+package restaurant
 
 import (
 	"encoding/json"

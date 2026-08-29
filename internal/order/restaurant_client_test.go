@@ -1,4 +1,4 @@
-package orders
+package order
 
 import (
 	"context"
@@ -93,6 +93,7 @@ func TestHTTPRestaurantClientHandlesTransportAndPartnerFailures(t *testing.T) {
 			transport: func(*http.Request) (*http.Response, error) {
 				return nil, errors.New("connection refused")
 			},
+			want: ErrPartnerUnavailable,
 		},
 		{
 			name: "temporary status",
@@ -128,6 +129,20 @@ func TestHTTPRestaurantClientHandlesTransportAndPartnerFailures(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestHTTPRestaurantClientRejectsUnexpectedClientStatus(t *testing.T) {
+	httpClient := &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		return response(http.StatusNotFound, `{}`), nil
+	})}
+
+	_, err := NewHTTPRestaurantClient(httpClient).SubmitOrder(context.Background(), Order{
+		ID:                       testOrderID,
+		RestaurantIntegrationURL: "http://restaurant:8081/api/v1",
+	})
+	if !errors.Is(err, ErrInvalidPartnerResponse) {
+		t.Fatalf("expected invalid response error, got %v", err)
 	}
 }
 

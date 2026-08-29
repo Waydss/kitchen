@@ -9,28 +9,28 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/catalog"
-	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/orders"
-	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/platform/config"
-	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/platform/httpserver"
-	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/platform/postgres"
+	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/config"
+	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/httpserver"
+	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/order"
+	"github.com/talense-tasks/backend-trainee-assignment-autumn-2026-waydss-e38eb47e/internal/postgres"
 )
 
-func RunAPI(ctx context.Context, cfg config.API, logger *slog.Logger) error {
-	pool, err := postgres.Open(ctx, cfg.DatabaseURL)
+func RunKitchen(ctx context.Context, cfg config.Kitchen, logger *slog.Logger) error {
+	pool, err := postgres.Open(ctx, cfg.Database.URL)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
 
-	restaurantClient := orders.NewHTTPRestaurantClient(&http.Client{Timeout: cfg.RestaurantRequestTimeout})
-	router := NewAPIRouter(pool, restaurantClient, cfg.SwaggerOrigin, logger)
-	logger.Info("starting api", "address", cfg.HTTPAddress)
-	return httpserver.Run(ctx, cfg.HTTPAddress, router, cfg.ShutdownTimeout)
+	restaurantClient := order.NewHTTPRestaurantClient(&http.Client{Timeout: cfg.Restaurant.RequestTimeout})
+	router := NewKitchenRouter(pool, restaurantClient, cfg.Swagger.Origin, logger)
+	logger.Info("starting kitchen", "address", cfg.HTTP.Address)
+	return httpserver.Run(ctx, cfg.HTTP.Address, router, cfg.HTTP.ShutdownTimeout)
 }
 
-func NewAPIRouter(
+func NewKitchenRouter(
 	pool *pgxpool.Pool,
-	restaurantClient orders.RestaurantClient,
+	restaurantClient order.RestaurantClient,
 	swaggerOrigin string,
 	logger *slog.Logger,
 ) *gin.Engine {
@@ -63,9 +63,9 @@ func NewAPIRouter(
 	catalogHandler := catalog.NewHandler(catalogService)
 	catalogHandler.RegisterRoutes(apiV1)
 
-	orderRepository := orders.NewPostgresRepository(pool)
-	orderService := orders.NewService(orderRepository, restaurantClient)
-	orderHandler := orders.NewHandler(orderService)
+	orderRepository := order.NewPostgresRepository(pool)
+	orderService := order.NewService(orderRepository, restaurantClient)
+	orderHandler := order.NewHandler(orderService)
 	orderHandler.RegisterRoutes(apiV1)
 
 	return router
